@@ -1,6 +1,7 @@
 #include "sync.h"
 #include "calendar_api.h"
 #include "storage.h"
+#include <algorithm>
 
 SyncManager syncMgr;
 
@@ -18,13 +19,15 @@ bool SyncManager::pushPending() {
         return true;
     }
 
+    std::vector<PendingChange> succeeded;
+
     for (auto& p : pending) {
         if (p.action == "create") {
             CalendarEvent created;
             if (calendar.createEvent(p.event, created)) {
-                // Remove pending, add to cache with real ID
-                storage.addPendingChange({"delete", p.event}); // mark this pending done
+                // Replace pending event ID with real Google ID in cache
                 storage.updateEventInCache(created);
+                succeeded.push_back(p);
             } else {
                 log_e("Failed to push create: %s", p.event.summary.c_str());
             }
@@ -33,29 +36,49 @@ bool SyncManager::pushPending() {
             if (calendar.updateEvent(p.event)) {
                 p.event.dirty = false;
                 storage.updateEventInCache(p.event);
-                // We'll clear pending after full push
+                succeeded.push_back(p);
             } else {
                 log_e("Failed to push update: %s", p.event.summary.c_str());
             }
         }
         else if (p.action == "delete") {
-            // Only send delete if it has a real Google ID
+            bool ok = false;
             if (p.event.id.length() > 5) {
-                if (calendar.deleteEvent(p.event.id)) {
-                    storage.deleteEventFromCache(p.event.id);
-                } else {
-                    log_e("Failed to push delete: %s", p.event.id.c_str());
-                }
+                // Has Google ID — delete remotely
+                ok = calendar.deleteEvent(p.event.id);
             } else {
-                // Never synced — just remove from cache
+                // Never synced — just remove locally
+                ok = true;
+            }
+            if (ok) {
                 storage.deleteEventFromCache(p.event.id);
+                succeeded.push_back(p);
+            } else {
+                log_e("Failed to push delete: %s", p.event.id.c_str());
             }
         }
     }
 
-    storage.clearPending();
-    _synced = true;
-    return true;
+    // Remove succeeded changes from pending
+    // Keep only those that failed
+    std::vector<PendingChange> remaining;
+    for (auto& p : pending) {
+        bool found = false;
+        for (auto& s : succeeded) {
+            if (p.action == s.action && p.event.id == s.event.id &&
+                p.event.summary == s.event.summary) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) remaining.push_back(p);
+    }
+    storage.savePending(remaining);
+
+    _synced = remaining.empty();
+    log_i("Push: %d/%d succeeded, %d remaining",
+          succeeded.size(), pending.size(), remaining.size());
+    return remaining.empty();
 }
 
 // ─── Pull incremental (using syncToken) ───
@@ -66,7 +89,7 @@ bool SyncManager::pullIncremental() {
 
     if (syncToken.length() == 0) {
         log_i("No sync token — doing full pull instead");
-        return false; // caller should fall back to full
+        return false;
     }
 
     std::vector<CalendarEvent> changes;
@@ -88,22 +111,50 @@ bool SyncManager::pullFull(const String& timeMin, const String& timeMax) {
     if (!calendar.fetchEvents(timeMin, timeMax, events)) {
         return false;
     }
-    storage.saveEvents(events);
-    storage.saveLastSync("", millis());
+
+    // Merge with local events (preserve dirty local-only events)
+    std::vector<CalendarEvent> local;
+    storage.loadEvents(local);
+
+    for (auto& remote : events) {
+        bool found = false;
+        for (auto& l : local) {
+            if (l.id == remote.id) {
+                l = remote;  // Replace with server version
+                found = true;
+                break;
+            }
+        }
+        if (!found && !remote.deleted) {
+            local.push_back(remote);
+        }
+    }
+
+    // Remove server-deleted
+    local.erase(std::remove_if(local.begin(), local.end(),
+        [](const CalendarEvent& e) { return e.deleted; }), local.end());
+
+    storage.saveEvents(local);
+    // Don't save sync token here — full pull doesn't provide one.
+    // Save a placeholder timestamp so we know when we last synced.
+    storage.saveLastSync("FULL_SYNC_" + String(millis()), millis());
     _synced = true;
-    log_i("Full pull: %d events saved", events.size());
+    log_i("Full pull: %d events merged", local.size());
     return true;
 }
 
 // ─── Full sync (push + pull) ───
 bool SyncManager::fullSync() {
-    if (!pushPending()) return false;
+    if (!pushPending()) {
+        log_w("Push failed, aborting sync");
+        return false;
+    }
 
     // Try incremental first
     if (!pullIncremental()) {
         // Fall back to full pull for next 30 days
         time_t now = time(nullptr);
-        struct tm* t = localtime(&now);
+        struct tm* t = gmtime(&now);
         char buf[32];
 
         strftime(buf, sizeof(buf), "%Y-%m-%dT00:00:00Z", t);
@@ -127,14 +178,13 @@ bool SyncManager::applyRemoteChanges(const std::vector<CalendarEvent>& remoteEve
     storage.loadEvents(local);
 
     for (auto& remote : remoteEvents) {
-        // Find in local
         bool found = false;
         for (auto& l : local) {
             if (l.id == remote.id) {
                 found = true;
                 if (remote.deleted) {
                     l.deleted = true;
-                } else {
+                } else if (!l.dirty) {
                     l = remote;
                 }
                 break;

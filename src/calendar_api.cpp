@@ -34,50 +34,45 @@ bool CalendarAPI::fetchEvents(const String& timeMin, const String& timeMax, std:
     String token = getAccessToken();
     if (token.length() == 0) return false;
 
-    String url = String(CAL_BASE) + "/events?"
+    String baseUrl = String(CAL_BASE) + "/events?"
         "orderBy=startTime&singleEvents=true"
         "&timeMin=" + urlEncode(timeMin) +
         "&timeMax=" + urlEncode(timeMax) +
         "&maxResults=250";
 
-    HTTPClient http;
     WiFiClientSecure client;
     client.setInsecure();
 
-    http.begin(client, url);
-    http.addHeader("Authorization", "Bearer " + token);
-
-    // Pagination
     String pageToken;
     do {
-        String fullUrl = url;
+        HTTPClient http;
+        String fullUrl = baseUrl;
         if (pageToken.length() > 0) fullUrl += "&pageToken=" + urlEncode(pageToken);
 
         http.begin(client, fullUrl);
         http.addHeader("Authorization", "Bearer " + token);
         int code = http.GET();
+
         if (code != 200) {
             log_e("Calendar fetch: HTTP %d", code);
-            log_e("Response: %s", http.getString().c_str());
             http.end();
             return false;
         }
         String resp = http.getString();
+        http.end();
 
         JsonDocument doc;
         DeserializationError err = deserializeJson(doc, resp);
-        if (err) { log_e("JSON parse: %s", err.c_str()); http.end(); return false; }
+        if (err) { log_e("JSON parse: %s", err.c_str()); return false; }
 
         JsonArray items = doc["items"].as<JsonArray>();
         for (auto item : items) {
-            CalendarEvent ev = parseEventItem(item);
-            events.push_back(ev);
+            events.push_back(parseEventItem(item));
         }
         pageToken = doc["nextPageToken"] | "";
-        http.end();
     } while (pageToken.length() > 0);
 
-    log_i("Fetched %d events [%s ~ %s]", events.size(), timeMin.c_str(), timeMax.c_str());
+    log_i("Fetched %d events", events.size());
     return true;
 }
 
@@ -87,24 +82,23 @@ bool CalendarAPI::syncEvents(const String& syncToken, std::vector<CalendarEvent>
     String token = getAccessToken();
     if (token.length() == 0) return false;
 
-    String url = String(CAL_BASE) + "/events?"
+    String baseUrl = String(CAL_BASE) + "/events?"
         "showDeleted=true&maxResults=250"
         "&syncToken=" + urlEncode(syncToken);
 
-    HTTPClient http;
     WiFiClientSecure client;
     client.setInsecure();
 
     String pageToken;
     do {
-        String fullUrl = url;
+        HTTPClient http;
+        String fullUrl = baseUrl;
         if (pageToken.length() > 0) fullUrl += "&pageToken=" + urlEncode(pageToken);
 
         http.begin(client, fullUrl);
         http.addHeader("Authorization", "Bearer " + token);
         int code = http.GET();
 
-        // 410 means sync token expired → do full resync
         if (code == 410) {
             log_w("Sync token expired, need full resync");
             http.end();
@@ -115,7 +109,6 @@ bool CalendarAPI::syncEvents(const String& syncToken, std::vector<CalendarEvent>
             http.end();
             return false;
         }
-
         String resp = http.getString();
         http.end();
 
@@ -125,14 +118,12 @@ bool CalendarAPI::syncEvents(const String& syncToken, std::vector<CalendarEvent>
 
         JsonArray items = doc["items"].as<JsonArray>();
         for (auto item : items) {
-            CalendarEvent ev = parseEventItem(item);
-            changed.push_back(ev);
+            changed.push_back(parseEventItem(item));
         }
         newSyncToken = doc["nextSyncToken"] | "";
         pageToken    = doc["nextPageToken"] | "";
     } while (pageToken.length() > 0);
 
-    log_i("Sync: %d changes, new sync token: %s", changed.size(), newSyncToken.c_str());
     return true;
 }
 
@@ -159,16 +150,16 @@ bool CalendarAPI::createEvent(const CalendarEvent& evt, CalendarEvent& created) 
     String jsonBody;
     serializeJson(body, jsonBody);
 
-    HTTPClient http;
     WiFiClientSecure client;
     client.setInsecure();
 
+    HTTPClient http;
     http.begin(client, String(CAL_BASE) + "/events");
     http.addHeader("Authorization", "Bearer " + token);
     http.addHeader("Content-Type", "application/json");
     int code = http.POST(jsonBody);
     if (code != 200) {
-        log_e("Create event: HTTP %d — %s", code, http.getString().c_str());
+        log_e("Create event: HTTP %d", code);
         http.end();
         return false;
     }
@@ -208,16 +199,16 @@ bool CalendarAPI::updateEvent(const CalendarEvent& evt) {
     String jsonBody;
     serializeJson(body, jsonBody);
 
-    HTTPClient http;
     WiFiClientSecure client;
     client.setInsecure();
 
+    HTTPClient http;
     http.begin(client, String(CAL_BASE) + "/events/" + urlEncode(evt.id));
     http.addHeader("Authorization", "Bearer " + token);
     http.addHeader("Content-Type", "application/json");
     int code = http.PUT(jsonBody);
     if (code != 200) {
-        log_e("Update event: HTTP %d — %s", code, http.getString().c_str());
+        log_e("Update event: HTTP %d", code);
         http.end();
         return false;
     }
@@ -232,15 +223,15 @@ bool CalendarAPI::deleteEvent(const String& eventId) {
     String token = getAccessToken();
     if (token.length() == 0) return false;
 
-    HTTPClient http;
     WiFiClientSecure client;
     client.setInsecure();
 
+    HTTPClient http;
     http.begin(client, String(CAL_BASE) + "/events/" + urlEncode(eventId));
     http.addHeader("Authorization", "Bearer " + token);
     int code = http.sendRequest("DELETE");
     if (code != 204) {
-        log_e("Delete event: HTTP %d — %s", code, http.getString().c_str());
+        log_e("Delete event: HTTP %d", code);
         http.end();
         return false;
     }
@@ -249,22 +240,36 @@ bool CalendarAPI::deleteEvent(const String& eventId) {
     return true;
 }
 
+// ─── Convert RFC 3339 to epoch ms (manual, no strptime) ───
+uint64_t CalendarAPI::parseRfc3339(const String& rfc3339) {
+    // Expected: "2026-06-06T09:00:00.000Z" or "2026-06-06T09:00:00-03:00"
+    int y = 0, M = 0, d = 0, h = 0, m = 0, s = 0;
+    if (sscanf(rfc3339.c_str(), "%d-%d-%dT%d:%d:%d", &y, &M, &d, &h, &m, &s) < 6) {
+        return 0;
+    }
+    // Days from 1970-01-01 (simplified — doesn't account for leap seconds)
+    // tm struct alternative
+    struct tm tm = {0};
+    tm.tm_year = y - 1900;
+    tm.tm_mon  = M - 1;
+    tm.tm_mday = d;
+    tm.tm_hour = h;
+    tm.tm_min  = m;
+    tm.tm_sec  = s;
+    tm.tm_isdst = -1;
+    time_t t = mktime(&tm);
+    return (uint64_t)t * 1000;
+}
+
 // ─── Parse a single event from JSON ───
 CalendarEvent CalendarAPI::parseEventItem(JsonObject& item) {
     CalendarEvent ev;
     ev.id         = item["id"]         | "";
-    ev.summary    = item["summary"]    | "(sem título)";
+    ev.summary    = item["summary"]    | "(sem titulo)";
     ev.description= item["description"]| "";
     ev.color_id   = item["colorId"]    | "";
-    ev.deleted    = item["status"] == "cancelled" || false;
+    ev.deleted    = (item["status"] == "cancelled");
     ev.dirty      = false;
-
-    // updated is RFC3339 — convert to epoch ms
-    String updated = item["updated"] | "";
-    if (updated.length() > 0) {
-        // Parse simple: take the raw string as fallback
-        // Full ISO parsing is complex; store for sync
-    }
 
     // Start
     JsonObject start = item["start"];
@@ -286,20 +291,16 @@ CalendarEvent CalendarAPI::parseEventItem(JsonObject& item) {
     // Parse updated timestamp
     String updatedStr = item["updated"] | "";
     if (updatedStr.length() > 0) {
-        struct tm tm;
-        if (strptime(updatedStr.c_str(), "%Y-%m-%dT%H:%M:%S", &tm)) {
-            time_t t = mktime(&tm);
-            ev.updated_ms = (int64_t)t * 1000;
-        }
+        ev.updated_ms = parseRfc3339(updatedStr);
     }
 
     return ev;
 }
 
-// ─── Date Helpers ───
+// ─── Date Helpers (UTC ISO strings, no "Z" suffix — use +00:00 for clarity) ───
 String CalendarAPI::todayMin() {
     time_t now = time(nullptr);
-    struct tm* t = localtime(&now);
+    struct tm* t = gmtime(&now);  // gmtime, not localtime!
     char buf[32];
     strftime(buf, sizeof(buf), "%Y-%m-%dT00:00:00Z", t);
     return String(buf);
@@ -307,7 +308,7 @@ String CalendarAPI::todayMin() {
 
 String CalendarAPI::todayMax() {
     time_t now = time(nullptr) + 86400;
-    struct tm* t = localtime(&now);
+    struct tm* t = gmtime(&now);
     char buf[32];
     strftime(buf, sizeof(buf), "%Y-%m-%dT00:00:00Z", t);
     return String(buf);
@@ -315,8 +316,8 @@ String CalendarAPI::todayMax() {
 
 String CalendarAPI::nowISO() {
     time_t now = time(nullptr);
-    struct tm* t = localtime(&now);
+    struct tm* t = gmtime(&now);
     char buf[32];
-    strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", t);
+    strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", t);
     return String(buf);
 }

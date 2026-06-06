@@ -59,6 +59,9 @@ struct UIManager {
     // ─── Sync status ───
     void setSyncIcon(bool synced, int pendingCount);
 
+    // ─── Caps access for input handling ───
+    bool isCaps() { return _caps; }
+
 private:
     Screen _screen = SCREEN_BOOT;
     String _message;

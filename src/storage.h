@@ -5,6 +5,8 @@
 #include <ArduinoJson.h>
 #include <SD.h>
 #include <FS.h>
+#include <vector>
+#include <algorithm>
 
 // ─── SD File Paths ───
 #define AUTH_FILE           "/auth.json"

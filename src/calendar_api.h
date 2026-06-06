@@ -26,9 +26,8 @@ public:
     static String nowISO();
 
 private:
-    bool parseEventsList(const String& json, std::vector<CalendarEvent>& events, String& nextSyncToken);
     CalendarEvent parseEventItem(JsonObject& item);
-    http_client _http;  // We'll use HTTPClient directly in .cpp
+    uint64_t parseRfc3339(const String& rfc3339);
 
     String getAccessToken();
 };

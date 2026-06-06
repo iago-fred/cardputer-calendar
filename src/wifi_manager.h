@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include <vector>
+#include <algorithm>
 
 struct ScannedNetwork {
     String ssid;

@@ -27,6 +27,8 @@ void UIManager::setScreen(Screen s) {
     _scrollOffset = 0;
     _inputBuffer = "";
     _cursorPos = 0;
+    _shift = false;
+    _caps = false;
     M5Cardputer.Display.fillScreen(COLOR_BG);
 }
 
@@ -35,6 +37,8 @@ void UIManager::showMessage(const String& msg, uint16_t color, uint32_t duration
     _msgColor = color;
     _msgActive = true;
     _msgUntil = millis() + durationMs;
+    // Draw immediately
+    drawMessage();
 }
 
 // ─── Top bar ───
@@ -45,18 +49,19 @@ void UIManager::drawTopBar() {
     M5Cardputer.Display.print("Neon Calendar");
 
     // Sync status
-    if (_synced) {
-        M5Cardputer.Display.setTextColor(COLOR_GREEN, COLOR_SURFACE);
-        M5Cardputer.Display.setCursor(310 - 30, 3);
-        M5Cardputer.Display.print("✓");
-    }
-
-    // Pending count
+    String status;
     if (_pendingCount > 0) {
+        status = " P:" + String(_pendingCount);
         M5Cardputer.Display.setTextColor(COLOR_YELLOW, COLOR_SURFACE);
-        M5Cardputer.Display.setCursor(310 - 50, 3);
-        M5Cardputer.Display.printf("P:%d", _pendingCount);
+    } else if (_synced) {
+        status = " OK";
+        M5Cardputer.Display.setTextColor(COLOR_GREEN, COLOR_SURFACE);
+    } else {
+        status = " --";
+        M5Cardputer.Display.setTextColor(COLOR_MUTED, COLOR_SURFACE);
     }
+    M5Cardputer.Display.setCursor(310 - textWidth(status), 3);
+    M5Cardputer.Display.print(status);
 }
 
 // ─── Bottom bar ───
@@ -74,7 +79,6 @@ void UIManager::drawBottomBar(const String& leftHint, const String& rightHint) {
 // ─── Message overlay ───
 void UIManager::drawMessage() {
     if (!_msgActive) return;
-    // Semi-transparent box
     M5Cardputer.Display.fillRect(20, 100, 280, 40, COLOR_SURFACE);
     M5Cardputer.Display.drawRect(20, 100, 280, 40, COLOR_ACCENT);
     M5Cardputer.Display.setTextColor(_msgColor, COLOR_SURFACE);
@@ -127,16 +131,18 @@ int UIManager::textWidth(const String& text, int fontSize) {
 // ─── WiFi Scan Screen ───
 void UIManager::showWifiScan() {
     M5Cardputer.Display.fillScreen(COLOR_BG);
-    drawString(4, 20, "📶 Redes WiFi", COLOR_TEXT, 2);
-    drawString(4, 42, "Escaneando...", COLOR_MUTED);
-    drawBottomBar("ESC: voltar", "SET: confirmar");
+    drawString(4, 20, "WiFi - Scan", COLOR_ACCENT, 2);
+    drawString(4, 42, "[Enter] para escanear", COLOR_MUTED);
+    drawBottomBar("ESC: voltar", "ENT: scan");
 }
 
 void UIManager::showWifiPasswordPrompt(const String& ssid) {
     M5Cardputer.Display.fillScreen(COLOR_BG);
     drawString(4, 20, "Senha: " + ssid, COLOR_TEXT);
-    drawString(4, 50, "> " + _inputBuffer + (millis() % 1000 < 500 ? "|" : " "), COLOR_ACCENT);
-    drawBottomBar("ESC: cancelar", "ENTER: conectar");
+    String masked;
+    for (size_t i = 0; i < _inputBuffer.length(); i++) masked += '*';
+    drawString(4, 50, "> " + masked + (millis() % 1000 < 500 ? "|" : " "), COLOR_ACCENT);
+    drawBottomBar("ESC: cancelar", "ENT: conectar");
 }
 
 // ─── Agenda Screen ───
@@ -153,7 +159,8 @@ void UIManager::showAgenda(const std::vector<CalendarEvent>& events) {
 
     if (events.empty()) {
         drawString(10, 60, "Nenhum evento hoje", COLOR_MUTED);
-        drawBottomBar("SET: menu", "WiFi: sync");
+        drawString(10, 80, "[+] Novo  [W] WiFi  [S] Sync", COLOR_MUTED);
+        drawBottomBar("SET: menu", "W:WiFi S:Sync");
         drawMessage();
         return;
     }
@@ -171,16 +178,30 @@ void UIManager::showAgenda(const std::vector<CalendarEvent>& events) {
 
         // Time
         String time;
-        if (ev.is_all_day) time = "🌅";
+        if (ev.is_all_day) time = "ALL";
         else time = ev.start_date.substring(11, 16);
 
         drawString(10, y, time, COLOR_MUTED);
-        drawString(50, y, ev.summary, (i == (size_t)_selectedIndex) ? COLOR_ACCENT : c);
+
+        // Summary (truncate to fit)
+        String summary = ev.summary;
+        if (textWidth(summary, 1) > 250) {
+            while (textWidth(summary + "...", 1) > 250) summary.remove(summary.length() - 1);
+            summary += "...";
+        }
+        drawString(50, y, summary, c);
+
+        // Selection indicator
+        if ((int)i == _selectedIndex) {
+            fillRect(0, y - 1, 320, 18, 0x0841); // subtle highlight
+            drawString(50, y, summary, COLOR_ACCENT);
+            drawString(0, y, ">", COLOR_ACCENT);
+        }
 
         y += 18;
     }
 
-    drawBottomBar("▲▼: navegar", "SET: abrir");
+    drawBottomBar(",. :navegar", "ENT:abrir");
     drawMessage();
 }
 
@@ -195,24 +216,23 @@ void UIManager::showEventDetail(const CalendarEvent& evt) {
     // Date/time
     String timeStr;
     if (evt.is_all_day) {
-        timeStr = "📅 " + evt.start_date.substring(0, 10);
+        timeStr = "Data: " + evt.start_date.substring(0, 10);
         if (evt.start_date != evt.end_date)
-            timeStr += " → " + evt.end_date.substring(0, 10);
+            timeStr += " -> " + evt.end_date.substring(0, 10);
     } else {
-        timeStr = "🕐 " + evt.start_date.substring(0, 16) + " → " + evt.end_date.substring(11, 16);
+        timeStr = "Horario: " + evt.start_date.substring(0, 16) + " - " + evt.end_date.substring(11, 16);
     }
     drawString(4, 50, timeStr, COLOR_TEXT);
 
     // Description
     if (evt.description.length() > 0) {
-        int y = 75;
-        drawString(4, y, evt.description, COLOR_MUTED);
+        drawString(4, 75, evt.description, COLOR_MUTED);
     }
 
     // Color indicator
     drawString(4, 200, "Cor: " + evt.color_id, c);
 
-    drawBottomBar("ESC: voltar", "DEL: excluir");
+    drawBottomBar("ESC: voltar", "D:excluir E:editar");
     drawMessage();
 }
 
@@ -221,21 +241,20 @@ void UIManager::showEventEditor(const CalendarEvent& evt) {
     M5Cardputer.Display.fillScreen(COLOR_BG);
     drawTopBar();
 
-    drawString(4, 22, evt.id.length() > 0 ? "✏️ Editar" : "➕ Novo Evento", COLOR_ACCENT, 2);
+    String title = evt.id.length() > 0 ? "Editar" : "Novo Evento";
+    drawString(4, 22, title, COLOR_ACCENT, 2);
 
-    // Show current fields being edited
+    // Show current field
     int y = 50;
-    drawString(4, y, "📝 Título: ", COLOR_MUTED);
-    drawString(80, y, _inputBuffer.length() > 0 ? _inputBuffer : "(digite)", COLOR_TEXT);
-    y += 20;
-    drawString(4, y, "📅 Data: ", COLOR_MUTED);
-    drawString(80, y, evt.start_date.length() > 0 ? evt.start_date.substring(0, 10) : "hoje", COLOR_TEXT);
+    drawString(4, y, "Titulo:", COLOR_MUTED);
+    String displayText = _inputBuffer.length() > 0 ? _inputBuffer : "(digite e ENTER)";
+    drawString(4, y + 16, "> " + displayText + (millis() % 1000 < 500 ? "|" : " "), COLOR_ACCENT);
 
-    drawBottomBar("ESC: cancelar", "↵: salvar");
+    drawBottomBar("ESC: cancelar", "ENT: salvar");
     drawMessage();
 }
 
-// ─── Settings Screen ───
+// ─── Sync status ───
 void UIManager::setSyncIcon(bool synced, int pendingCount) {
     _synced = synced;
     _pendingCount = pendingCount;

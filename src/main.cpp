@@ -34,20 +34,45 @@ enum AppState {
     STATE_EVENT_EDIT,
     STATE_EVENT_CREATE,
     STATE_SETTINGS,
+    STATE_SYNCING,
     STATE_ERROR,
 };
 
 AppState state = STATE_BOOT;
 
+// ─── Global references ───
+std::vector<CalendarEvent> g_events;       // today's events (displayed)
+std::vector<CalendarEvent> g_allEvents;    // full cache
+int g_selectedEvent = 0;
+String g_wifiPassword;
+
 // ─── Forward declarations ───
 void bootSequence();
-void handleWiFiSelect();
+void loadAndShowAgenda();
 void handleAgendaInput();
 void handleEventDetailInput();
-void handleEventEditInput();
-void handleWiFiScanInput();
+void handleEventEditInput(String& buffer, bool& done, bool& save);
+void handleWiFiSelect();
 void handleWiFiPasswordInput();
-std::vector<CalendarEvent> loadTodayEvents();
+void triggerSync();
+
+// ─── Keyboard helper ───
+typedef struct { uint8_t key; bool shift; } key_event_t;
+
+key_event_t readKey() {
+    if (!M5Cardputer.Keyboard.isChange()) return {0, false};
+    if (!M5Cardputer.Keyboard.isPressed()) return {0, false};
+
+    auto keys = M5Cardputer.Keyboard.keys();
+    for (auto k : keys) {
+        uint8_t kval = k;
+        if (kval == 0) continue;
+        bool shift = (kval >= 0x80);  // M5Cardputer sends shifted keys with high bit
+        uint8_t key = kval & 0x7F;
+        return {key, shift};
+    }
+    return {0, false};
+}
 
 // ─── Setup ───
 void setup() {
@@ -57,29 +82,28 @@ void setup() {
     // Init Cardputer hardware
     M5Cardputer.begin();
     M5Cardputer.Display.setRotation(1);
-    M5Cardputer.Display.fillScreen(COLOR_BG);
-    M5Cardputer.Display.setTextColor(COLOR_TEXT, COLOR_BG);
+    M5Cardputer.Display.fillScreen(TFT_BLACK);
+    M5Cardputer.Display.setTextColor(TFT_WHITE, TFT_BLACK);
     M5Cardputer.Display.setTextSize(1);
     M5Cardputer.Display.setCursor(20, 60);
     M5Cardputer.Display.println("Neon Calendar");
     M5Cardputer.Display.setCursor(20, 80);
     M5Cardputer.Display.println("Iniciando...");
     M5Cardputer.Display.setCursor(20, 100);
-    M5Cardputer.Display.println("Carregando SD...");
+    M5Cardputer.Display.println("SD card...");
 
     // Init storage
     if (!storage.begin()) {
         M5Cardputer.Display.setCursor(20, 120);
-        M5Cardputer.Display.setTextColor(COLOR_RED);
+        M5Cardputer.Display.setTextColor(TFT_RED);
         M5Cardputer.Display.println("ERRO: SD nao encontrado!");
-        ui.showMessage("Insira o cartao SD", COLOR_RED, 10000);
     } else {
         M5Cardputer.Display.setCursor(20, 120);
-        M5Cardputer.Display.setTextColor(COLOR_GREEN);
+        M5Cardputer.Display.setTextColor(TFT_GREEN);
         M5Cardputer.Display.println("SD OK!");
     }
 
-    // Set time from compile time (will be updated via NTP later)
+    // Set timezone (BRT = UTC-3)
     configTime(-3 * 3600, 0, "pool.ntp.org", "time.google.com");
 
     ui.begin();
@@ -92,12 +116,53 @@ void loop() {
     ui.loop();
 
     switch (state) {
-        case STATE_WIFI_SCAN:    handleWiFiSelect();    break;
-        case STATE_WIFI_PASSWORD: handleWiFiPasswordInput(); break;
-        case STATE_AGENDA:       handleAgendaInput();    break;
-        case STATE_EVENT_DETAIL: handleEventDetailInput(); break;
+        case STATE_AGENDA:       handleAgendaInput();        break;
+        case STATE_EVENT_DETAIL: handleEventDetailInput();    break;
         case STATE_EVENT_EDIT:
-        case STATE_EVENT_CREATE: handleEventEditInput(); break;
+        case STATE_EVENT_CREATE: {
+            // Inline editor with keyboard
+            static String editBuffer;
+            static bool editDone = false;
+            static bool editSave = false;
+            handleEventEditInput(editBuffer, editDone, editSave);
+            if (editDone) {
+                if (editSave && editBuffer.length() > 0) {
+                    CalendarEvent newEvt;
+                    newEvt.summary = editBuffer;
+                    newEvt.start_date = CalendarAPI::todayMin();
+                    newEvt.end_date = CalendarAPI::todayMax();
+                    newEvt.is_all_day = true;
+                    newEvt.dirty = true;
+                    newEvt.id = "";
+
+                    if (state == STATE_EVENT_CREATE) {
+                        // Save as pending
+                        storage.addPendingChange({"create", newEvt});
+                        g_allEvents.push_back(newEvt);
+                        storage.saveEvents(g_allEvents);
+                        ui.showMessage("Criado (pendente sync)", TFT_GREEN, 2000);
+                    }
+                }
+                editBuffer = "";
+                state = STATE_AGENDA;
+                loadAndShowAgenda();
+            }
+            break;
+        }
+        case STATE_WIFI_SCAN:    handleWiFiSelect();         break;
+        case STATE_WIFI_PASSWORD: handleWiFiPasswordInput();  break;
+        case STATE_SYNCING: {
+            ui.showMessage("Sincronizando...", TFT_YELLOW, 0);
+            if (syncMgr.fullSync()) {
+                ui.setSyncIcon(true, syncMgr.pendingCount());
+                ui.showMessage("Sync OK!", TFT_GREEN, 2000);
+            } else {
+                ui.showMessage("Sync falhou", TFT_RED, 3000);
+            }
+            loadAndShowAgenda();
+            state = STATE_AGENDA;
+            break;
+        }
         default: break;
     }
 
@@ -106,82 +171,81 @@ void loop() {
 
 // ─── Boot Sequence ───
 void bootSequence() {
+    if (!storage.isReady()) {
+        M5Cardputer.Display.setCursor(20, 140);
+        M5Cardputer.Display.setTextColor(TFT_RED);
+        M5Cardputer.Display.println("Sem SD - Modo limitado");
+        delay(2000);
+        state = STATE_AGENDA;
+        loadAndShowAgenda();
+        return;
+    }
+
     // 1. Load auth
     M5Cardputer.Display.setCursor(20, 140);
-    M5Cardputer.Display.setTextColor(COLOR_TEXT);
-    M5Cardputer.Display.println("Carregando auth...");
+    M5Cardputer.Display.setTextColor(TFT_WHITE);
+    M5Cardputer.Display.println("Auth...");
 
     OAuthConfig auth;
     if (!storage.loadAuth(auth)) {
         M5Cardputer.Display.setCursor(20, 160);
-        M5Cardputer.Display.setTextColor(COLOR_RED);
-        M5Cardputer.Display.println("ERRO: auth.json nao encontrado!");
-        ui.showMessage("Coloque auth.json no cartao SD", COLOR_RED, 10000);
-        state = STATE_ERROR;
+        M5Cardputer.Display.setTextColor(TFT_RED);
+        M5Cardputer.Display.println("auth.json nao encontrado!");
+        delay(2000);
+        state = STATE_AGENDA;
+        loadAndShowAgenda();
         return;
     }
     oauth2.setConfig(auth.client_id, auth.client_secret, auth.refresh_token);
     M5Cardputer.Display.setCursor(20, 160);
-    M5Cardputer.Display.setTextColor(COLOR_GREEN);
+    M5Cardputer.Display.setTextColor(TFT_GREEN);
     M5Cardputer.Display.println("Auth OK!");
 
-    // 2. Wait for NTP
+    // 2. Wait for NTP (max 10s)
     M5Cardputer.Display.setCursor(20, 180);
-    M5Cardputer.Display.setTextColor(COLOR_TEXT);
-    M5Cardputer.Display.println("Sincronizando hora...");
+    M5Cardputer.Display.setTextColor(TFT_WHITE);
+    M5Cardputer.Display.println("NTP...");
     time_t now = time(nullptr);
     int attempts = 0;
-    while (now < 1700000000 && attempts < 20) {
-        delay(500);
+    while (now < 1700000000 && attempts < 50) {
+        delay(200);
         now = time(nullptr);
         attempts++;
-    }
-    if (now > 1700000000) {
-        M5Cardputer.Display.setCursor(20, 200);
-        M5Cardputer.Display.setTextColor(COLOR_GREEN);
-        M5Cardputer.Display.println("Hora OK!");
-    } else {
-        M5Cardputer.Display.setCursor(20, 200);
-        M5Cardputer.Display.setTextColor(COLOR_YELLOW);
-        M5Cardputer.Display.println("Hora: usando fallback");
     }
 
     // 3. Try WiFi
     state = STATE_WIFI_CONNECTING;
-    M5Cardputer.Display.setCursor(20, 220);
-    M5Cardputer.Display.setTextColor(COLOR_TEXT);
-    M5Cardputer.Display.println("Conectando WiFi...");
+    M5Cardputer.Display.setCursor(20, 200);
+    M5Cardputer.Display.setTextColor(TFT_WHITE);
+    M5Cardputer.Display.println("WiFi...");
 
     if (wifiMgr.connectFromSaved()) {
-        M5Cardputer.Display.setCursor(20, 220);
-        M5Cardputer.Display.setTextColor(COLOR_GREEN);
-        M5Cardputer.Display.printf("WiFi: %s", wifiMgr.currentSSID().c_str());
+        M5Cardputer.Display.printf("WiFi: %s\n", wifiMgr.currentSSID().c_str());
 
         // Try sync
-        delay(500);
+        delay(300);
         if (syncMgr.fullSync()) {
             ui.setSyncIcon(true, syncMgr.pendingCount());
+            M5Cardputer.Display.println("Sync OK!");
         } else {
-            ui.showMessage("Sync parcial", COLOR_YELLOW, 5000);
-            // Load local cache anyway
+            M5Cardputer.Display.println("Sync: offline");
         }
     } else {
         M5Cardputer.Display.setCursor(20, 220);
-        M5Cardputer.Display.setTextColor(COLOR_YELLOW);
-        M5Cardputer.Display.println("WiFi: sem rede salva");
-        ui.showMessage("Conecte-se ao WiFi", COLOR_YELLOW, 5000);
+        M5Cardputer.Display.setTextColor(TFT_YELLOW);
+        M5Cardputer.Display.println("Offline");
     }
 
-    // Load events from cache (or empty)
     delay(1000);
     state = STATE_AGENDA;
-    ui.setScreen(SCREEN_MAIN_AGENDA);
+    loadAndShowAgenda();
 }
 
-// ─── Load today's events ───
-std::vector<CalendarEvent> loadTodayEvents() {
-    std::vector<CalendarEvent> all;
-    storage.loadEvents(all);
+// ─── Load today's events and show agenda ───
+void loadAndShowAgenda() {
+    g_events.clear();
+    g_allEvents.clear();
+    storage.loadEvents(g_allEvents);
 
     time_t now = time(nullptr);
     struct tm* t = localtime(&now);
@@ -193,51 +257,194 @@ std::vector<CalendarEvent> loadTodayEvents() {
     mktime(t);
     strftime(tomorrow, sizeof(tomorrow), "%Y-%m-%d", t);
 
-    std::vector<CalendarEvent> todayEvents;
-    for (auto& ev : all) {
+    for (auto& ev : g_allEvents) {
         if (ev.deleted) continue;
-        if (ev.start_date.substring(0, 10) <= String(today) &&
-            ev.end_date.substring(0, 10) >= String(today)) {
-            todayEvents.push_back(ev);
+        // Check if event overlaps with today
+        String evStart = ev.start_date.substring(0, 10);
+        String evEnd   = ev.end_date.substring(0, 10);
+        if (evStart <= String(tomorrow) && evEnd >= String(today)) {
+            g_events.push_back(ev);
         }
     }
 
-    return todayEvents;
+    g_selectedEvent = 0;
+    ui.showAgenda(g_events);
+}
+
+// ─── Agenda Input ───
+void handleAgendaInput() {
+    auto k = readKey();
+    if (k.key == 0) return;
+
+    if (k.key == 'w') {
+        // Start WiFi scan
+        state = STATE_WIFI_SCAN;
+        ui.showWifiScan();
+        return;
+    }
+
+    if (k.key == 's') {
+        // Trigger sync
+        state = STATE_SYNCING;
+        return;
+    }
+
+    if (k.key == '+') {
+        // Create new event
+        state = STATE_EVENT_CREATE;
+        ui.showEventEditor(CalendarEvent());
+        return;
+    }
+
+    // Navigation: , = up, / = down, SET = select, ESC = nothing
+    if (k.key == ',') { // Up (M5Cardputer: , key = up)
+        if (g_selectedEvent > 0) g_selectedEvent--;
+        ui.showAgenda(g_events);
+    }
+    else if (k.key == '.') { // Down (M5Cardputer: . key = down)
+        if (g_selectedEvent < (int)g_events.size() - 1) g_selectedEvent++;
+        ui.showAgenda(g_events);
+    }
+    else if (k.key == '\n' || k.key == '\r') { // SET/Enter
+        if (g_events.size() > 0 && g_selectedEvent < (int)g_events.size()) {
+            state = STATE_EVENT_DETAIL;
+            ui.showEventDetail(g_events[g_selectedEvent]);
+        }
+    }
+}
+
+// ─── Event Detail Input ───
+void handleEventDetailInput() {
+    auto k = readKey();
+    if (k.key == 0) return;
+
+    if (k.key == 0x1B) { // ESC
+        state = STATE_AGENDA;
+        loadAndShowAgenda();
+        return;
+    }
+
+    if (k.key == 'd') { // Delete
+        if (g_selectedEvent < (int)g_events.size()) {
+            auto& ev = g_events[g_selectedEvent];
+            g_allEvents.erase(
+                std::remove_if(g_allEvents.begin(), g_allEvents.end(),
+                    [&](const CalendarEvent& e) { return e.id == ev.id; }),
+                g_allEvents.end());
+            storage.saveEvents(g_allEvents);
+            storage.addPendingChange({"delete", ev});
+            ui.showMessage("Evento excluido", TFT_RED, 2000);
+            state = STATE_AGENDA;
+            loadAndShowAgenda();
+        }
+    }
+
+    if (k.key == 'e') { // Edit
+        ui.showMessage("Edicao via Google", TFT_YELLOW, 2000);
+    }
+}
+
+// ─── Event Edit Input ───
+void handleEventEditInput(String& buffer, bool& done, bool& save) {
+    auto k = readKey();
+    if (k.key == 0) return;
+
+    if (k.key == 0x1B) { // ESC
+        done = true;
+        save = false;
+        return;
+    }
+
+    if (k.key == '\n' || k.key == '\r') { // Enter = save
+        done = true;
+        save = true;
+        return;
+    }
+
+    if (k.key == 0x08 || k.key == 0x7F) { // Backspace
+        if (buffer.length() > 0) buffer.remove(buffer.length() - 1);
+    } else if (k.key >= 0x20 && k.key <= 0x7E) {
+        // Printable ASCII
+        if (k.shift || ui.isCaps()) {
+            buffer += (char)toupper(k.key);
+        } else {
+            buffer += (char)k.key;
+        }
+    }
+
+    // Update display
+    CalendarEvent dummy;
+    dummy.start_date = CalendarAPI::todayMin();
+    ui.showEventEditor(dummy);
 }
 
 // ─── WiFi Scan Input ───
 void handleWiFiSelect() {
-    if (M5Cardputer.Keyboard.isChange()) {
-        if (M5Cardputer.Keyboard.isPressed()) {
-            // ESC → back to agenda
-            // ENTER → select network and connect
-            // Arrow keys to navigate (mapped to ,/. for up/down)
+    auto k = readKey();
+    if (k.key == 0) return;
+
+    if (k.key == 0x1B) { // ESC
+        state = STATE_AGENDA;
+        loadAndShowAgenda();
+        return;
+    }
+
+    // Scan on enter
+    if (k.key == '\n' || k.key == '\r') {
+        ui.showMessage("Escaneando...", TFT_YELLOW, 0);
+        delay(1000); // Brief pause for UX
+
+        std::vector<ScannedNetwork> nets;
+        if (wifiMgr.scan(nets, true)) {
+            // Show first N available
+            M5Cardputer.Display.fillScreen(COLOR_BG);
+            M5Cardputer.Display.setTextColor(TFT_WHITE, COLOR_BG);
+            M5Cardputer.Display.setCursor(4, 20);
+            M5Cardputer.Display.println("Redes encontradas:");
+            int y = 40;
+            for (size_t i = 0; i < nets.size() && i < 10; i++) {
+                M5Cardputer.Display.setCursor(8, y);
+                M5Cardputer.Display.printf("%d. %s (%ddBm)", i+1, nets[i].ssid.c_str(), nets[i].rssi);
+                y += 14;
+            }
+            M5Cardputer.Display.setCursor(4, y + 10);
+            M5Cardputer.Display.println("Digite o numero + Enter");
+        } else {
+            ui.showMessage("Nenhuma rede", TFT_RED, 2000);
         }
     }
 }
 
 // ─── WiFi Password Input ───
 void handleWiFiPasswordInput() {
-    if (M5Cardputer.Keyboard.isChange()) {
-        if (M5Cardputer.Keyboard.isPressed()) {
-            auto key = M5Cardputer.Keyboard.keys();
-            // Handle keyboard input
-        }
+    auto k = readKey();
+    if (k.key == 0) return;
+
+    if (k.key == 0x1B) { // ESC
+        state = STATE_WIFI_SCAN;
+        ui.showWifiScan();
+        return;
     }
-}
 
-// ─── Agenda Input ───
-void handleAgendaInput() {
-    if (M5Cardputer.Keyboard.isChange()) {
-        if (M5Cardputer.Keyboard.isPressed()) {
-            // Get key from keyboard buffer
-            // We'll handle specific keys via the M5Cardputer API
+    if (k.key == '\n' || k.key == '\r') {
+        // Connect
+        String ssid = "selected_ssid"; // TODO: pass from previous screen
+        if (wifiMgr.connect(ssid, g_wifiPassword, 15000)) {
+            storage.addWifiNetwork({ssid, g_wifiPassword});
+            ui.showMessage("Conectado!", TFT_GREEN, 2000);
+            state = STATE_AGENDA;
+            loadAndShowAgenda();
+        } else {
+            ui.showMessage("Falhou", TFT_RED, 3000);
         }
+        return;
     }
+
+    if (k.key == 0x08 || k.key == 0x7F) {
+        if (g_wifiPassword.length() > 0) g_wifiPassword.remove(g_wifiPassword.length() - 1);
+    } else if (k.key >= 0x20 && k.key <= 0x7E) {
+        g_wifiPassword += (char)k.key;
+    }
+
+    ui.showWifiPasswordPrompt("Rede");
 }
-
-// ─── Event Detail Input ───
-void handleEventDetailInput() {}
-
-// ─── Event Edit Input ───
-void handleEventEditInput() {}
