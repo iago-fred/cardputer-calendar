@@ -153,16 +153,17 @@ bool SyncManager::fullSync() {
     // Try incremental first
     if (!pullIncremental()) {
         // Fall back to full pull for next 30 days
+        // Compute in epoch seconds to avoid gmtime static buffer issues
         time_t now = time(nullptr);
-        struct tm* t = gmtime(&now);
+        time_t futureEpoch = now + (30L * 86400L);
+        struct tm tmin = *gmtime(&now);
+        struct tm tmax = *gmtime(&futureEpoch);
         char buf[32];
 
-        strftime(buf, sizeof(buf), "%Y-%m-%dT00:00:00Z", t);
+        strftime(buf, sizeof(buf), "%Y-%m-%dT00:00:00Z", &tmin);
         String timeMin(buf);
 
-        t->tm_mday += 30;
-        mktime(t);
-        strftime(buf, sizeof(buf), "%Y-%m-%dT00:00:00Z", t);
+        strftime(buf, sizeof(buf), "%Y-%m-%dT00:00:00Z", &tmax);
         String timeMax(buf);
 
         if (!pullFull(timeMin, timeMax)) return false;

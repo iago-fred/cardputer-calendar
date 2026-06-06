@@ -136,11 +136,12 @@ void UIManager::showWifiScan() {
     drawBottomBar("ESC: voltar", "ENT: scan");
 }
 
-void UIManager::showWifiPasswordPrompt(const String& ssid) {
+void UIManager::showWifiPasswordPrompt(const String& ssid, const String& currentPassword) {
     M5Cardputer.Display.fillScreen(COLOR_BG);
     drawString(4, 20, "Senha: " + ssid, COLOR_TEXT);
     String masked;
-    for (size_t i = 0; i < _inputBuffer.length(); i++) masked += '*';
+    const String& pw = currentPassword.length() > 0 ? currentPassword : _inputBuffer;
+    for (size_t i = 0; i < pw.length(); i++) masked += '*';
     drawString(4, 50, "> " + masked + (millis() % 1000 < 500 ? "|" : " "), COLOR_ACCENT);
     drawBottomBar("ESC: cancelar", "ENT: conectar");
 }

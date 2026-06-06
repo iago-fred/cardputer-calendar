@@ -48,7 +48,7 @@ struct UIManager {
 
     // WiFi
     void showWifiScan();
-    void showWifiPasswordPrompt(const String& ssid);
+    void showWifiPasswordPrompt(const String& ssid, const String& currentPassword = "");
     void wifiScanResult(const String& ssid);
 
     // Events
@@ -61,6 +61,8 @@ struct UIManager {
 
     // ─── Caps access for input handling ───
     bool isCaps() { return _caps; }
+    // ─── Set input buffer (from external edit handlers) ───
+    void setInputBuffer(const String& buf) { _inputBuffer = buf; }
 
 private:
     Screen _screen = SCREEN_BOOT;

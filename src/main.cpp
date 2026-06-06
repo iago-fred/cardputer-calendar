@@ -20,6 +20,7 @@
 #include "calendar_api.h"
 #include "sync.h"
 #include "ui.h"
+#include <algorithm>
 
 // ─── State ───
 enum AppState {
@@ -45,6 +46,7 @@ std::vector<CalendarEvent> g_events;       // today's events (displayed)
 std::vector<CalendarEvent> g_allEvents;    // full cache
 int g_selectedEvent = 0;
 String g_wifiPassword;
+String g_selectedSSID;
 
 // ─── Forward declarations ───
 void bootSequence();
@@ -120,8 +122,12 @@ void loop() {
         case STATE_EVENT_DETAIL: handleEventDetailInput();    break;
         case STATE_EVENT_EDIT:
         case STATE_EVENT_CREATE: {
-            // Inline editor with keyboard
             static String editBuffer;
+            static bool firstEnter = true;
+            if (firstEnter) {
+                editBuffer = "";
+                firstEnter = false;
+            }
             static bool editDone = false;
             static bool editSave = false;
             handleEventEditInput(editBuffer, editDone, editSave);
@@ -136,14 +142,18 @@ void loop() {
                     newEvt.id = "";
 
                     if (state == STATE_EVENT_CREATE) {
-                        // Save as pending
-                        storage.addPendingChange({"create", newEvt});
+                        PendingChange pc;
+                        pc.action = "create";
+                        pc.event = newEvt;
+                        storage.addPendingChange(pc);
                         g_allEvents.push_back(newEvt);
                         storage.saveEvents(g_allEvents);
                         ui.showMessage("Criado (pendente sync)", TFT_GREEN, 2000);
                     }
                 }
-                editBuffer = "";
+                editDone = false;
+                editSave = false;
+                firstEnter = true;
                 state = STATE_AGENDA;
                 loadAndShowAgenda();
             }
@@ -324,7 +334,7 @@ void handleEventDetailInput() {
         return;
     }
 
-    if (k.key == 'd') { // Delete
+    if (k.key == 'd' || k.key == 0x7F) { // Delete
         if (g_selectedEvent < (int)g_events.size()) {
             auto& ev = g_events[g_selectedEvent];
             g_allEvents.erase(
@@ -332,8 +342,11 @@ void handleEventDetailInput() {
                     [&](const CalendarEvent& e) { return e.id == ev.id; }),
                 g_allEvents.end());
             storage.saveEvents(g_allEvents);
-            storage.addPendingChange({"delete", ev});
-            ui.showMessage("Evento excluido", TFT_RED, 2000);
+            PendingChange pc;
+            pc.action = "delete";
+            pc.event = ev;
+            storage.addPendingChange(pc);
+            ui.showMessage("Excluido (pendente sync)", TFT_RED, 2000);
             state = STATE_AGENDA;
             loadAndShowAgenda();
         }
@@ -421,17 +434,24 @@ void handleWiFiPasswordInput() {
     if (k.key == 0) return;
 
     if (k.key == 0x1B) { // ESC
+        g_wifiPassword = "";
+        g_selectedSSID = "";
         state = STATE_WIFI_SCAN;
         ui.showWifiScan();
         return;
     }
 
     if (k.key == '\n' || k.key == '\r') {
-        // Connect
-        String ssid = "selected_ssid"; // TODO: pass from previous screen
-        if (wifiMgr.connect(ssid, g_wifiPassword, 15000)) {
-            storage.addWifiNetwork({ssid, g_wifiPassword});
+        if (g_selectedSSID.length() == 0) {
+            ui.showMessage("Selecione rede primeiro", TFT_RED, 2000);
+            state = STATE_WIFI_SCAN;
+            return;
+        }
+        if (wifiMgr.connect(g_selectedSSID, g_wifiPassword, 15000)) {
+            storage.addWifiNetwork({g_selectedSSID, g_wifiPassword});
             ui.showMessage("Conectado!", TFT_GREEN, 2000);
+            g_wifiPassword = "";
+            g_selectedSSID = "";
             state = STATE_AGENDA;
             loadAndShowAgenda();
         } else {
@@ -446,5 +466,6 @@ void handleWiFiPasswordInput() {
         g_wifiPassword += (char)k.key;
     }
 
-    ui.showWifiPasswordPrompt("Rede");
+    ui.setInputBuffer(g_wifiPassword);
+    ui.showWifiPasswordPrompt(g_selectedSSID, g_wifiPassword);
 }
