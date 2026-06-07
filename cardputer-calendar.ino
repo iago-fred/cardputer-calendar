@@ -60,13 +60,65 @@ void handleWiFiPasswordInput();
 // ─── Keyboard helper ───
 typedef struct { uint8_t key; bool shift; } key_event_t;
 
+// M5Cardputer keyboard matrix (row = y, col = x)
+// Values: ASCII char, 0 = modifier/skip, 127 = backspace, 9 = tab, 27 = esc
+static const uint8_t KEY_MATRIX[5][17] = {
+    {   0, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 127,   0,   0,   0 },
+    {   9, 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']',   0,   0,   0,   0 },
+    {   0, 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'',   0,   0,   0,   0,   0 },
+    {   0, 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/',   0,   0,   0,   0,   0,   0 },
+    {   0,   0,   0,   0, ' ',   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0 },
+};
+
+// Shifted symbols for keys that change with shift
+static uint8_t shiftSymbol(uint8_t key) {
+    switch (key) {
+        case '1': return '!';
+        case '2': return '@';
+        case '3': return '#';
+        case '4': return '$';
+        case '5': return '%';
+        case '6': return '^';
+        case '7': return '&';
+        case '8': return '*';
+        case '9': return '(';
+        case '0': return ')';
+        case '-': return '_';
+        case '=': return '+';
+        case '[': return '{';
+        case ']': return '}';
+        case ';': return ':';
+        case '\'': return '"';
+        case ',': return '<';
+        case '.': return '>';
+        case '/': return '?';
+        default:  return key;
+    }
+}
+
 key_event_t readKey() {
     if (!M5Cardputer.Keyboard.isChange()) return {0, false};
     if (!M5Cardputer.Keyboard.isPressed()) return {0, false};
 
-    auto status = M5Cardputer.Keyboard.keysState();
-    if (status.value == 0) return {0, false};
-    return {status.value, status.shift};
+    // keyList() returns positions in the key matrix (x=col, y=row)
+    auto keys = M5Cardputer.Keyboard.keyList();
+    if (keys.empty()) return {0, false};
+
+    uint8_t key = KEY_MATRIX[keys[0].y][keys[0].x];
+    if (key == 0) return {0, false};
+
+    auto state = M5Cardputer.Keyboard.keysState();
+    
+    // Apply shift: letters uppercase, symbols shifted
+    if (state.shift || state.caps) {
+        if (key >= 'a' && key <= 'z') {
+            key = toupper(key);
+        } else if (state.shift) {
+            key = shiftSymbol(key);
+        }
+    }
+
+    return {key, state.shift};
 }
 
 // ─── Setup ───
@@ -370,12 +422,8 @@ void handleEventEditInput(String& buffer, bool& done, bool& save) {
     if (k.key == 0x08 || k.key == 0x7F) { // Backspace
         if (buffer.length() > 0) buffer.remove(buffer.length() - 1);
     } else if (k.key >= 0x20 && k.key <= 0x7E) {
-        // Printable ASCII
-        if (k.shift || ui.isCaps()) {
-            buffer += (char)toupper(k.key);
-        } else {
-            buffer += (char)k.key;
-        }
+        // Printable ASCII — readKey() already applies shift/caps
+        buffer += (char)k.key;
     }
 
     // Update display

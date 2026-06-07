@@ -2,6 +2,7 @@
 #define CALENDAR_API_H
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include "storage.h"
 #include <vector>
 
