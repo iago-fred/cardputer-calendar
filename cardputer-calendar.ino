@@ -97,7 +97,7 @@ static uint8_t shiftSymbol(uint8_t key) {
 }
 
 key_event_t readKey() {
-    M5Cardputer.Keyboard.update();
+    // Keyboard is updated by M5Cardputer.update() in main loop
     if (!M5Cardputer.Keyboard.isChange()) return {0, false};
     if (!M5Cardputer.Keyboard.isPressed()) return {0, false};
 
