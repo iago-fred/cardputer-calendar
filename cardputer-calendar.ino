@@ -60,8 +60,8 @@ void handleWiFiPasswordInput();
 // ─── Keyboard helper ───
 typedef struct { uint8_t key; bool shift; } key_event_t;
 
-// M5Cardputer keyboard matrix (row = y, col = x)
-// Values: ASCII char, 0 = modifier/skip, 127 = backspace, 9 = tab, 27 = esc
+// M5Cardputer keyboard matrix: keyList() returns Point2D_t (x=col, y=row)
+// Decode matrix position to ASCII character (from M5GFX Keyboard_Class)
 static const uint8_t KEY_MATRIX[5][17] = {
     {   0, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 127,   0,   0,   0 },
     {   9, 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']',   0,   0,   0,   0 },
@@ -97,28 +97,29 @@ static uint8_t shiftSymbol(uint8_t key) {
 }
 
 key_event_t readKey() {
+    M5Cardputer.Keyboard.update();
     if (!M5Cardputer.Keyboard.isChange()) return {0, false};
     if (!M5Cardputer.Keyboard.isPressed()) return {0, false};
 
-    // keyList() returns positions in the key matrix (x=col, y=row)
+    // keyList() returns Point2D_t with matrix positions (x=col, y=row)
     auto keys = M5Cardputer.Keyboard.keyList();
     if (keys.empty()) return {0, false};
 
     uint8_t key = KEY_MATRIX[keys[0].y][keys[0].x];
     if (key == 0) return {0, false};
 
-    auto state = M5Cardputer.Keyboard.keysState();
-    
+    auto status = M5Cardputer.Keyboard.keysState();
+
     // Apply shift: letters uppercase, symbols shifted
-    if (state.shift || state.caps) {
+    if (status.shift) {
         if (key >= 'a' && key <= 'z') {
             key = toupper(key);
-        } else if (state.shift) {
+        } else {
             key = shiftSymbol(key);
         }
     }
 
-    return {key, state.shift};
+    return {key, status.shift};
 }
 
 // ─── Setup ───
