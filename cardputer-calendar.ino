@@ -64,8 +64,8 @@ typedef struct { uint8_t key; bool shift; } key_event_t;
 // Decode matrix position to ASCII character (from M5GFX Keyboard_Class)
 static const uint8_t KEY_MATRIX[5][17] = {
     {   0, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 127,   0,   0,   0 },
-    {   9, 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']',   0,   0,   0,   0 },
-    {   0, 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'',   0,   0,   0,   0,   0 },
+    {   9, 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n',  0,   0,   0 },
+    {   0, 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '\n',  0,   0,   0,   0 },
     {   0, 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/',   0,   0,   0,   0,   0,   0 },
     {   0,   0,   0,   0, ' ',   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0 },
 };
@@ -104,6 +104,13 @@ key_event_t readKey() {
     // keyList() returns Point2D_t with matrix positions (x=col, y=row)
     auto keys = M5Cardputer.Keyboard.keyList();
     if (keys.empty()) return {0, false};
+
+    // DEBUG: print coordinates to Serial
+    Serial.printf("KEY: x=%d y=%d\n", keys[0].x, keys[0].y);
+
+    if (keys[0].y < 0 || keys[0].y >= 5 || keys[0].x < 0 || keys[0].x >= 17) {
+        return {0, false};
+    }
 
     uint8_t key = KEY_MATRIX[keys[0].y][keys[0].x];
     if (key == 0) return {0, false};
