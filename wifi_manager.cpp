@@ -22,6 +22,9 @@ bool WiFiManager::connectFromSaved() {
 
 bool WiFiManager::scan(std::vector<ScannedNetwork>& results, bool blocking) {
     results.clear();
+    // Ensure WiFi is in station mode before scanning
+    WiFi.mode(WIFI_STA);
+    delay(100);
     int n = WiFi.scanNetworks(blocking);
     if (n < 0) {
         log_e("WiFi scan failed: %d", n);

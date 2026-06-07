@@ -107,15 +107,16 @@ key_event_t readKey() {
     auto keys = M5Cardputer.Keyboard.keyList();
     if (keys.empty()) return {0, false};
 
-    // Bounds check: 4 rows x 14 cols
-    if (keys[0].y < 0 || keys[0].y >= 4 || keys[0].x < 0 || keys[0].x >= 14) {
-        return {0, false};
-    }
-
-    uint8_t key = KEY_MATRIX[keys[0].y][keys[0].x];
-    if (key == 0) return {0, false};  // modifier key (fn, shift, ctrl, opt, alt)
-
     auto status = M5Cardputer.Keyboard.keysState();
+    uint8_t key = 0;
+
+    // Iterate through ALL pressed keys, skip modifiers (value 0 in matrix)
+    for (auto& k : keys) {
+        if (k.y < 0 || k.y >= 4 || k.x < 0 || k.x >= 14) continue;
+        uint8_t c = KEY_MATRIX[k.y][k.x];
+        if (c != 0) { key = c; break; }
+    }
+    if (key == 0) return {0, false};
 
     // Apply shift: letters uppercase, symbols shifted
     if (status.shift) {
