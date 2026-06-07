@@ -1,14 +1,12 @@
 #include "storage.h"
 #include <algorithm>
-#include <SPI.h>
 
 StorageManager storage;
 
 bool StorageManager::begin() {
-    // M5Cardputer TF card shares SPI bus with display:
-    // SCK=14, MISO=13, MOSI=15, CS=4
-    // Note: M5GFX uses internal SPI for display, so we init the default SPI separately
-    SPI.begin(14, 13, 15);
+    // M5Cardputer TF card: SCK=14, MISO=13, MOSI=15, CS=4
+    // M5GFX/display SPI is already initialized by M5Cardputer.begin()
+    // We must NOT call SPI.begin() — it conflicts with keyboard GPIO13/15.
     pinMode(4, OUTPUT);
     if (!SD.begin(4)) {
         log_e("SD card mount failed");

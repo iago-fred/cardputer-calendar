@@ -11,6 +11,8 @@
  */
 
 #include <Arduino.h>
+#include <SD.h>       // must be before M5GFX for SPI sharing
+#include <SPI.h>
 #include <M5Cardputer.h>
 #include <time.h>
 
