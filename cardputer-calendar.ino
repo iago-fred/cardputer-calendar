@@ -165,7 +165,7 @@ void setup() {
     M5Cardputer.Display.println("SD card...");
 
     // Init storage
-    Serial.println("Iniciando SD (CS=4)...");
+    Serial.println("Iniciando SD (CS=12)...");
     if (!storage.begin()) {
         M5Cardputer.Display.setCursor(20, 120);
         M5Cardputer.Display.setTextColor(TFT_RED);
