@@ -1,25 +1,13 @@
 #include "storage.h"
 #include <algorithm>
-#include <SPI.h>
 
 StorageManager storage;
 
-// ─── M5Cardputer TF Card Pinout ───
-// CS:   GPIO4
-// MOSI: GPIO15
-// MISO: GPIO33
-// SCK:  GPIO14
-#define TF_CS   4
-#define TF_MOSI 15
-#define TF_MISO 33
-#define TF_SCLK 14
-
 bool StorageManager::begin() {
-    // Explicit SPI bus init for M5Cardputer TF card
-    SPI.begin(TF_SCLK, TF_MISO, TF_MOSI);
-    pinMode(TF_CS, OUTPUT);
-
-    if (!SD.begin(TF_CS)) {
+    // SD card in M5Cardputer uses CS=GPIO4
+    // M5Cardputer.begin() already configured the SPI bus, so just call SD.begin
+    pinMode(4, OUTPUT);
+    if (!SD.begin(4)) {
         log_e("SD card mount failed");
         _ready = false;
         return false;
