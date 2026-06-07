@@ -165,14 +165,17 @@ void setup() {
     M5Cardputer.Display.println("SD card...");
 
     // Init storage
+    Serial.println("Iniciando SD (CS=4)...");
     if (!storage.begin()) {
         M5Cardputer.Display.setCursor(20, 120);
         M5Cardputer.Display.setTextColor(TFT_RED);
         M5Cardputer.Display.println("ERRO: SD nao encontrado!");
+        Serial.println("SD: FALHOU");
     } else {
         M5Cardputer.Display.setCursor(20, 120);
         M5Cardputer.Display.setTextColor(TFT_GREEN);
         M5Cardputer.Display.println("SD OK!");
+        Serial.println("SD: OK");
     }
 
     // Set timezone (BRT = UTC-3)
@@ -212,13 +215,17 @@ void loop() {
                     newEvt.id = "";
 
                     if (state == STATE_EVENT_CREATE) {
-                        PendingChange pc;
-                        pc.action = "create";
-                        pc.event = newEvt;
-                        storage.addPendingChange(pc);
-                        g_allEvents.push_back(newEvt);
-                        storage.saveEvents(g_allEvents);
-                        ui.showMessage("Criado (pendente sync)", TFT_GREEN, 2000);
+                        if (!storage.isReady()) {
+                            ui.showMessage("ERRO: SD nao encontrado!", TFT_RED, 3000);
+                        } else {
+                            PendingChange pc;
+                            pc.action = "create";
+                            pc.event = newEvt;
+                            storage.addPendingChange(pc);
+                            g_allEvents.push_back(newEvt);
+                            storage.saveEvents(g_allEvents);
+                            ui.showMessage("Criado (pendente sync)", TFT_GREEN, 2000);
+                        }
                     }
                 }
                 editDone = false;
