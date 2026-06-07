@@ -108,13 +108,27 @@ key_event_t readKey() {
     if (keys.empty()) return {0, false};
 
     auto status = M5Cardputer.Keyboard.keysState();
-    uint8_t key = 0;
+
+    // Check for fn+backtick = ESC (fn=[2][0], backtick=[0][0])
+    bool fnPressed = false, backtickPressed = false;
+    for (auto& k : keys) {
+        if (k.x == 0 && k.y == 2) fnPressed = true;
+        if (k.x == 0 && k.y == 0) backtickPressed = true;
+    }
+    if (fnPressed && backtickPressed) {
+        return {0x1B, status.shift};  // ESC
+    }
 
     // Iterate through ALL pressed keys, skip modifiers (value 0 in matrix)
+    uint8_t key = 0;
     for (auto& k : keys) {
         if (k.y < 0 || k.y >= 4 || k.x < 0 || k.x >= 14) continue;
         uint8_t c = KEY_MATRIX[k.y][k.x];
-        if (c != 0) { key = c; break; }
+        if (c != 0 && !(k.x == 0 && k.y == 0)) { key = c; break; }  // skip backtick key
+    }
+    // If only backtick pressed (no fn), use it
+    if (key == 0 && backtickPressed && !fnPressed) {
+        key = '`';
     }
     if (key == 0) return {0, false};
 
