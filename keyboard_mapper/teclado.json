@@ -1,0 +1,356 @@
+[
+    {
+        "tecla": "`",
+        "combinacoes": [
+            {"fn": "esc"},
+            {"Aa": "~"}
+        ],
+        "X": 0,
+        "Y": 0
+    },
+    {
+        "tecla": "1",
+        "combinacoes": [
+            {"Aa": "!"}
+        ],
+        "X": 1,
+        "Y": 0
+    },
+    {
+        "tecla": "2",
+        "combinacoes": [
+            {"Aa": "@"}
+        ],
+        "X": 2,
+        "Y": 0
+    },
+    {
+        "tecla": "3",
+        "combinacoes": [
+            {"Aa": "#"}
+        ],
+        "X": 3,
+        "Y": 0
+    },
+    {
+        "tecla": "4",
+        "combinacoes": [
+            {"Aa": "$"}
+        ],
+        "X": 4,
+        "Y": 0
+    },
+    {
+        "tecla": "5",
+        "combinacoes": [
+            {"Aa": "%"}
+        ],
+        "X": 5,
+        "Y": 0
+    },
+    {
+        "tecla": "6",
+        "combinacoes": [
+            {"Aa": "^"}
+        ],
+        "X": 6,
+        "Y": 0
+    },
+    {
+        "tecla": "7",
+        "combinacoes": [
+            {"Aa": "&"}
+        ],
+        "X": 7,
+        "Y": 0
+    },
+    {
+        "tecla": "8",
+        "combinacoes": [
+            {"Aa": "*"}
+        ],
+        "X": 8,
+        "Y": 0
+    },
+    {
+        "tecla": "9",
+        "combinacoes": [
+            {"Aa": "("}
+        ],
+        "X": 9,
+        "Y": 0
+    },
+    {
+        "tecla": "0",
+        "combinacoes": [
+            {"Aa": ")"}
+        ],
+        "X": 10,
+        "Y": 0
+    },
+    {
+        "tecla": "_",
+        "combinacoes": [
+            {"Aa": "-"}
+        ],
+        "X": 11,
+        "Y": 0
+    },
+    {
+        "tecla": "=",
+        "combinacoes": [
+            {"Aa": "+"}
+        ],
+        "X": 12,
+        "Y": 0
+    },
+    {
+        "tecla": "backspace",
+        "combinacoes": [
+            {"fn": "del"}
+        ],
+        "X": 13,
+        "Y": 0
+    },
+    {
+        "tecla": "tab",
+        "X": 0,
+        "Y": 1
+    },
+    {
+        "tecla": "q",
+        "X": 1,
+        "Y": 1
+    },
+    {
+        "tecla": "w",
+        "X": 2,
+        "Y": 1
+    },
+    {
+        "tecla": "e",
+        "X": 3,
+        "Y": 1
+    },
+    {
+        "tecla": "r",
+        "X": 4,
+        "Y": 1
+    },
+    {
+        "tecla": "t",
+        "X": 5,
+        "Y": 1
+    },
+    {
+        "tecla": "y",
+        "X": 6,
+        "Y": 1
+    },
+    {
+        "tecla": "u",
+        "X": 7,
+        "Y": 1
+    },
+    {
+        "tecla": "i",
+        "X": 8,
+        "Y": 1
+    },
+    {
+        "tecla": "o",
+        "X": 9,
+        "Y": 1
+    },
+    {
+        "tecla": "p",
+        "X": 10,
+        "Y": 1
+    },
+    {
+        "tecla": "[",
+        "combinacoes": [
+            {"Aa": "{"}
+        ],
+        "X": 11,
+        "Y": 1
+    },
+    {
+        "tecla": "]",
+        "combinacoes": [
+            {"Aa": "}"}
+        ],
+        "X": 12,
+        "Y": 1
+    },
+    {
+        "tecla": "contra barra",
+        "combinacoes": [
+            {"Aa": "|"}
+        ],
+        "X": 13,
+        "Y": 1
+    },
+    {
+        "tecla": "fn",
+        "X": 0,
+        "Y": 2
+    },
+    {
+        "tecla": "Aa",
+        "X": 1,
+        "Y": 2
+    },
+    {
+        "tecla": "a",
+        "X": 2,
+        "Y": 2
+    },
+    {
+        "tecla": "s",
+        "X": 3,
+        "Y": 2
+    },
+    {
+        "tecla": "d",
+        "X": 4,
+        "Y": 2
+    },
+    {
+        "tecla": "f",
+        "X": 5,
+        "Y": 2
+    },
+    {
+        "tecla": "g",
+        "X": 6,
+        "Y": 2
+    },
+    {
+        "tecla": "h",
+        "X": 7,
+        "Y": 2
+    },
+    {
+        "tecla": "j",
+        "X": 8,
+        "Y": 2
+    },
+    {
+        "tecla": "k",
+        "X": 9,
+        "Y": 2
+    },
+    {
+        "tecla": "l",
+        "X": 10,
+        "Y": 2
+    },
+    {
+        "tecla": ";",
+        "combinacoes": [
+            {"fn": "up"},
+            {"Aa": ":"}
+        ],
+        "X": 11,
+        "Y": 2
+    },
+    {
+        "tecla": "'",
+        "combinacoes": [
+            {"Aa": "aspas duplas"}
+        ],
+        "X": 12,
+        "Y": 2
+    },
+    {
+        "tecla": "enter",
+        "X": 13,
+        "Y": 2
+    },
+    {
+        "tecla": "ctrl",
+        "X": 0,
+        "Y": 3
+    },
+    {
+        "tecla": "opt",
+        "X": 1,
+        "Y": 3
+    },
+    {
+        "tecla": "alt",
+        "X": 2,
+        "Y": 3
+    },
+    {
+        "tecla": "z",
+        "X": 3,
+        "Y": 3
+    },
+    {
+        "tecla": "x",
+        "X": 4,
+        "Y": 3
+    },
+    {
+        "tecla": "c",
+        "X": 5,
+        "Y": 3
+    },
+    {
+        "tecla": "v",
+        "X": 6,
+        "Y": 3
+    },
+    {
+        "tecla": "b",
+        "X": 7,
+        "Y": 3
+    },
+    {
+        "tecla": "n",
+        "X": 8,
+        "Y": 3
+    },
+    {
+        "tecla": "m",
+        "X": 9,
+        "Y": 3
+    },
+    {
+        "tecla": ",",
+        "combinacoes": [
+            {"fn": "left"},
+            {"Aa": "<"}
+        ],
+        "X": 10,
+        "Y": 3
+    },
+    {
+        "tecla": ".",
+        "combinacoes": [
+            {"fn": "down"},
+            {"Aa": ">"}
+        ],
+        "X": 11,
+        "Y": 3
+    },
+    {
+        "tecla": "/",
+        "combinacoes": [
+            {"fn": "right"},
+            {"Aa": "?"}
+        ],
+        "X": 12,
+        "Y": 3
+    },
+    {
+        "tecla": "space",
+        "X": 13,
+        "Y": 3
+    },
+    {
+        "obs": "Todas as letras ficam em caixa alta combinadas com a tecla Aa"
+    }
+]
