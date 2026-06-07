@@ -230,6 +230,11 @@ void loop() {
         case STATE_WIFI_SCAN:    handleWiFiSelect();         break;
         case STATE_WIFI_PASSWORD: handleWiFiPasswordInput();  break;
         case STATE_SYNCING: {
+            if (!storage.isReady()) {
+                ui.showMessage("ERRO: SD nao encontrado!", TFT_RED, 3000);
+                state = STATE_AGENDA;
+                break;
+            }
             ui.showMessage("Sincronizando...", TFT_YELLOW, 0);
             if (syncMgr.fullSync()) {
                 ui.setSyncIcon(true, syncMgr.pendingCount());
@@ -363,6 +368,10 @@ void handleAgendaInput() {
 
     if (k.key == 's') {
         // Trigger sync
+        if (!storage.isReady()) {
+            ui.showMessage("ERRO: SD nao encontrado!", TFT_RED, 3000);
+            return;
+        }
         state = STATE_SYNCING;
         return;
     }
