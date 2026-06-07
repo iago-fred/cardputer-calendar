@@ -65,12 +65,12 @@ key_event_t readKey() {
     if (!M5Cardputer.Keyboard.isChange()) return {0, false};
     if (!M5Cardputer.Keyboard.isPressed()) return {0, false};
 
-    auto keys = M5Cardputer.Keyboard.keyList(); // keys() → keyList() in newer M5Cardputer lib
-    for (auto k : keys) {
+    auto status = M5Cardputer.Keyboard.keysState();
+    for (auto k : status.values) {
         uint8_t kval = k;
         if (kval == 0) continue;
-        bool shift = (kval >= 0x80);  // M5Cardputer sends shifted keys with high bit
-        uint8_t key = kval & 0x7F;
+        bool shift = status.shift;  // shift state from keysState
+        uint8_t key = kval;
         return {key, shift};
     }
     return {0, false};
