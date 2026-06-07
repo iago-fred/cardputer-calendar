@@ -1,12 +1,14 @@
 #include "storage.h"
 #include <algorithm>
+#include <SPI.h>
 
 StorageManager storage;
 
 bool StorageManager::begin() {
-    // M5Cardputer.begin() configures SPI for both display and TF card.
-    // SD include order (.ino: SD.h before M5GFX.h) enables sharing.
-    // Do NOT call SPI.begin() — it conflicts with keyboard GPIOs.
+    // M5Cardputer TF card: pins from pins_arduino.h
+    // MOSI=14, MISO=39, SCK=40, CS=4
+    // Keyboard uses GPIO {8,9,11,13,15,3,4,5,6,7} — no conflict!
+    SPI.begin(40, 39, 14);  // SCK, MISO, MOSI
     pinMode(4, OUTPUT);
     if (!SD.begin(4)) {
         log_e("SD card mount failed");
