@@ -262,7 +262,7 @@ uint64_t CalendarAPI::parseRfc3339(const String& rfc3339) {
 }
 
 // ─── Parse a single event from JSON ───
-CalendarEvent CalendarAPI::parseEventItem(const JsonObject& item) {
+CalendarEvent CalendarAPI::parseEventItem(JsonObjectConst item) {
     CalendarEvent ev;
     ev.id         = item["id"]         | "";
     ev.summary    = item["summary"]    | "(sem titulo)";
@@ -272,7 +272,7 @@ CalendarEvent CalendarAPI::parseEventItem(const JsonObject& item) {
     ev.dirty      = false;
 
     // Start
-    JsonObject start = item["start"];
+    JsonObjectConst start = item["start"];
     if (start["dateTime"].is<String>()) {
         ev.start_date = start["dateTime"] | "";
         ev.is_all_day = false;
@@ -281,7 +281,7 @@ CalendarEvent CalendarAPI::parseEventItem(const JsonObject& item) {
         ev.is_all_day = true;
     }
     // End
-    JsonObject end = item["end"];
+    JsonObjectConst end = item["end"];
     if (end["dateTime"].is<String>()) {
         ev.end_date = end["dateTime"] | "";
     } else {
@@ -297,27 +297,28 @@ CalendarEvent CalendarAPI::parseEventItem(const JsonObject& item) {
     return ev;
 }
 
-// ─── Date Helpers (UTC ISO strings, no "Z" suffix — use +00:00 for clarity) ───
+// ─── Date Helpers (local timezone ISO strings using timezone offset) ───
 String CalendarAPI::todayMin() {
     time_t now = time(nullptr);
-    struct tm* t = gmtime(&now);  // gmtime, not localtime!
+    struct tm* t = localtime(&now);
     char buf[32];
-    strftime(buf, sizeof(buf), "%Y-%m-%dT00:00:00Z", t);
-    return String(buf);
+    strftime(buf, sizeof(buf), "%Y-%m-%dT00:00:00", t);
+    // Append timezone offset from configTime (America/Bahia = -03:00)
+    return String(buf) + "-03:00";
 }
 
 String CalendarAPI::todayMax() {
     time_t now = time(nullptr) + 86400;
-    struct tm* t = gmtime(&now);
+    struct tm* t = localtime(&now);
     char buf[32];
-    strftime(buf, sizeof(buf), "%Y-%m-%dT00:00:00Z", t);
-    return String(buf);
+    strftime(buf, sizeof(buf), "%Y-%m-%dT00:00:00", t);
+    return String(buf) + "-03:00";
 }
 
 String CalendarAPI::nowISO() {
     time_t now = time(nullptr);
-    struct tm* t = gmtime(&now);
+    struct tm* t = localtime(&now);
     char buf[32];
-    strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", t);
-    return String(buf);
+    strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", t);
+    return String(buf) + "-03:00";
 }

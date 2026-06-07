@@ -26,7 +26,7 @@ public:
     static String nowISO();
 
 private:
-    CalendarEvent parseEventItem(const JsonObject& item);
+    CalendarEvent parseEventItem(JsonObjectConst item);
     uint64_t parseRfc3339(const String& rfc3339);
 
     String getAccessToken();

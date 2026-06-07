@@ -56,7 +56,6 @@ void handleEventDetailInput();
 void handleEventEditInput(String& buffer, bool& done, bool& save);
 void handleWiFiSelect();
 void handleWiFiPasswordInput();
-void triggerSync();
 
 // ─── Keyboard helper ───
 typedef struct { uint8_t key; bool shift; } key_event_t;
@@ -392,36 +391,50 @@ void handleEventEditInput(String& buffer, bool& done, bool& save) {
 }
 
 // ─── WiFi Scan Input ───
+static std::vector<ScannedNetwork> g_scanResults; // persist results across calls
+
 void handleWiFiSelect() {
     auto k = readKey();
     if (k.key == 0) return;
 
     if (k.key == 0x1B) { // ESC
+        g_scanResults.clear();
         state = STATE_AGENDA;
         loadAndShowAgenda();
+        return;
+    }
+
+    // Number selection (1-9): select network and go to password screen
+    if (k.key >= '1' && k.key <= '9') {
+        int idx = k.key - '1';
+        if (idx < (int)g_scanResults.size()) {
+            g_selectedSSID = g_scanResults[idx].ssid;
+            g_wifiPassword = "";
+            state = STATE_WIFI_PASSWORD;
+            ui.showWifiPasswordPrompt(g_selectedSSID);
+        }
         return;
     }
 
     // Scan on enter
     if (k.key == '\n' || k.key == '\r') {
         ui.showMessage("Escaneando...", TFT_YELLOW, 0);
-        delay(1000); // Brief pause for UX
 
-        std::vector<ScannedNetwork> nets;
-        if (wifiMgr.scan(nets, true)) {
+        g_scanResults.clear();
+        if (wifiMgr.scan(g_scanResults, true)) {
             // Show first N available
             M5Cardputer.Display.fillScreen(COLOR_BG);
             M5Cardputer.Display.setTextColor(TFT_WHITE, COLOR_BG);
             M5Cardputer.Display.setCursor(4, 20);
             M5Cardputer.Display.println("Redes encontradas:");
             int y = 40;
-            for (size_t i = 0; i < nets.size() && i < 10; i++) {
+            for (size_t i = 0; i < g_scanResults.size() && i < 10; i++) {
                 M5Cardputer.Display.setCursor(8, y);
-                M5Cardputer.Display.printf("%d. %s (%ddBm)", i+1, nets[i].ssid.c_str(), nets[i].rssi);
+                M5Cardputer.Display.printf("%d. %s (%ddBm)", i+1, g_scanResults[i].ssid.c_str(), g_scanResults[i].rssi);
                 y += 14;
             }
             M5Cardputer.Display.setCursor(4, y + 10);
-            M5Cardputer.Display.println("Digite o numero + Enter");
+            M5Cardputer.Display.println("Digite o numero");
         } else {
             ui.showMessage("Nenhuma rede", TFT_RED, 2000);
         }
