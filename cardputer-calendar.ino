@@ -65,7 +65,7 @@ key_event_t readKey() {
     if (!M5Cardputer.Keyboard.isChange()) return {0, false};
     if (!M5Cardputer.Keyboard.isPressed()) return {0, false};
 
-    auto keys = M5Cardputer.Keyboard.keys();
+    auto keys = M5Cardputer.Keyboard.keyList(); // keys() → keyList() in newer M5Cardputer lib
     for (auto k : keys) {
         uint8_t kval = k;
         if (kval == 0) continue;

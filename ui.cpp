@@ -84,7 +84,7 @@ void UIManager::drawMessage() {
     M5Cardputer.Display.setTextColor(_msgColor, COLOR_SURFACE);
     M5Cardputer.Display.setTextSize(1);
     int16_t x = 160 - (textWidth(_message) / 2);
-    M5Cardputer.Display.setCursor(max(x, 24), 112);
+    M5Cardputer.Display.setCursor(max((int)x, 24), 112);
     M5Cardputer.Display.print(_message);
 }
 

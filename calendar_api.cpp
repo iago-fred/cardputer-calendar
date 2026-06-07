@@ -262,7 +262,7 @@ uint64_t CalendarAPI::parseRfc3339(const String& rfc3339) {
 }
 
 // ─── Parse a single event from JSON ───
-CalendarEvent CalendarAPI::parseEventItem(JsonObject& item) {
+CalendarEvent CalendarAPI::parseEventItem(const JsonObject& item) {
     CalendarEvent ev;
     ev.id         = item["id"]         | "";
     ev.summary    = item["summary"]    | "(sem titulo)";
