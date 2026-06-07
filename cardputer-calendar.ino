@@ -65,14 +65,8 @@ key_event_t readKey() {
     if (!M5Cardputer.Keyboard.isPressed()) return {0, false};
 
     auto status = M5Cardputer.Keyboard.keysState();
-    for (auto k : status.values) {
-        uint8_t kval = k;
-        if (kval == 0) continue;
-        bool shift = status.shift;  // shift state from keysState
-        uint8_t key = kval;
-        return {key, shift};
-    }
-    return {0, false};
+    if (status.value == 0) return {0, false};
+    return {status.value, status.shift};
 }
 
 // ─── Setup ───
