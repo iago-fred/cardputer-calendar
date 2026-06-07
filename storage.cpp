@@ -5,13 +5,13 @@
 StorageManager storage;
 
 bool StorageManager::begin() {
-    // M5Cardputer TF card: pins from pins_arduino.h
-    // MOSI=14, MISO=39, SCK=40, CS=4
-    // Keyboard uses GPIO {8,9,11,13,15,3,4,5,6,7} — no conflict!
+    // M5Cardputer V1.1 TF card pins (from official docs):
+    // CS=G12, MOSI=G14, CLK=G40, MISO=G39
+    // No conflict with keyboard (GPIO {8,9,11,13,15,3,4,5,6,7})
     SPI.begin(40, 39, 14);  // SCK, MISO, MOSI
-    pinMode(4, OUTPUT);
-    if (!SD.begin(4)) {
-        log_e("SD card mount failed");
+    pinMode(12, OUTPUT);
+    if (!SD.begin(12)) {
+        log_e("SD card mount failed (CS=12)");
         _ready = false;
         return false;
     }
