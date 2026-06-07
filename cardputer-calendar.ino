@@ -61,18 +61,21 @@ void handleWiFiPasswordInput();
 typedef struct { uint8_t key; bool shift; } key_event_t;
 
 // M5Cardputer keyboard matrix: keyList() returns Point2D_t (x=col, y=row)
-// Decode matrix position to ASCII character (from M5GFX Keyboard_Class)
-static const uint8_t KEY_MATRIX[5][17] = {
-    {   0, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 127,   0,   0,   0 },
-    {   9, 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\n',  0,   0,   0 },
-    {   0, 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '\n',  0,   0,   0,   0 },
-    {   0, 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/',   0,   0,   0,   0,   0,   0 },
-    {   0,   0,   0,   0, ' ',   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0 },
+// Matrix mapeada manualmente por Iago via keyboard_mapper sketch
+// 4 linhas (y=0..3) x 14 colunas (x=0..13)
+// 127=backspace, 9=tab, 10=enter\n, 0=modificador (pular)
+static const uint8_t KEY_MATRIX[4][14] = {
+    //     0   1   2   3   4   5   6   7   8   9  10  11  12  13
+    /* 0 */'`','1','2','3','4','5','6','7','8','9','0','-','=',127,
+    /* 1 */  9,'q','w','e','r','t','y','u','i','o','p','[',']','\\',
+    /* 2 */  0,  0,'a','s','d','f','g','h','j','k','l',';','\'','\n',
+    /* 3 */  0,  0,  0,'z','x','c','v','b','n','m',',','.','/',' ',
 };
 
 // Shifted symbols for keys that change with shift
 static uint8_t shiftSymbol(uint8_t key) {
     switch (key) {
+        case '`': return '~';
         case '1': return '!';
         case '2': return '@';
         case '3': return '#';
@@ -87,6 +90,7 @@ static uint8_t shiftSymbol(uint8_t key) {
         case '=': return '+';
         case '[': return '{';
         case ']': return '}';
+        case '\\': return '|';
         case ';': return ':';
         case '\'': return '"';
         case ',': return '<';
@@ -97,23 +101,19 @@ static uint8_t shiftSymbol(uint8_t key) {
 }
 
 key_event_t readKey() {
-    // Keyboard is updated by M5Cardputer.update() in main loop
     if (!M5Cardputer.Keyboard.isChange()) return {0, false};
     if (!M5Cardputer.Keyboard.isPressed()) return {0, false};
 
-    // keyList() returns Point2D_t with matrix positions (x=col, y=row)
     auto keys = M5Cardputer.Keyboard.keyList();
     if (keys.empty()) return {0, false};
 
-    // DEBUG: print coordinates to Serial
-    Serial.printf("KEY: x=%d y=%d\n", keys[0].x, keys[0].y);
-
-    if (keys[0].y < 0 || keys[0].y >= 5 || keys[0].x < 0 || keys[0].x >= 17) {
+    // Bounds check: 4 rows x 14 cols
+    if (keys[0].y < 0 || keys[0].y >= 4 || keys[0].x < 0 || keys[0].x >= 14) {
         return {0, false};
     }
 
     uint8_t key = KEY_MATRIX[keys[0].y][keys[0].x];
-    if (key == 0) return {0, false};
+    if (key == 0) return {0, false};  // modifier key (fn, shift, ctrl, opt, alt)
 
     auto status = M5Cardputer.Keyboard.keysState();
 
